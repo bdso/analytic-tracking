@@ -1,0 +1,56 @@
+---
+- hosts: i_server
+  remote_user: root
+  vars:
+    path_api: "/opt/src/api"
+    service_source: "bigdata-api_eh_mics"
+    service_bin: "api_eh_mics-1.0-SNAPSHOT"
+    service_name: "EH"
+  tasks:
+    - name: Test connection
+      ping:
+      become: true
+      become_user: root
+      become_method: sudo
+    - name: Coppy source  
+      unarchive:
+        src: "/opt/src/{{ service_source }}/target/universal/{{ service_bin }}.zip"
+        dest: "{{ path_api }}"
+      become: true
+      become_user: root
+      become_method: sudo
+    - name: Coppy newrelic
+      unarchive:
+        src: "/opt/src/newrelic-java-3.41.0.zip"
+        dest: "{{ path_api }}/{{ service_bin }}"
+      become: true
+      become_user: root
+      become_method: sudo
+    - name: Change newrelic app name
+      replace:
+        path: "{{ path_api }}/{{ service_bin }}/newrelic/newrelic.yml"
+        regexp: "My Application"
+        replace: "{{ inventory_hostname }} {{ service_name }}"
+      become: true
+      become_user: root
+      become_method: sudo
+    - name: Prepare
+      become: true
+      become_user: root
+      become_method: sudo
+      command: "rm -rf {{ path_api }}/{{ service_bin }}/RUNNING_PID"
+      ignore_errors: yes
+    - name: Kill process 
+      become: true
+      become_user: root
+      become_method: sudo
+      shell: "kill -9 $(lsof -t -i:9544)"
+      ignore_errors: yes
+    - name: Deploy
+      become: true
+      become_user: root
+      become_method: sudo
+      shell: "({{ path_api }}/{{ service_bin }}/bin/api_eh_mics -Dconfig.resource=prod.conf -Dplay.crypto.secret=abcdefghijk -Dhttp.port=9544 -J-Xmx2048m -J-server -J-javaagent:{{ path_api }}/{{ service_bin }}/newrelic/newrelic.jar &)"
+      async: 3
+      poll: 1
+      ignore_errors: yes
